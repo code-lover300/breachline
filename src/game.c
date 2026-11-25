@@ -97,6 +97,7 @@ static int      camxi, camyi;
 typedef struct { char magic[4]; uint8_t stars[8]; int32_t best[8]; uint8_t unlocked, pad[3]; } Save;
 static Save save;
 
+static Target SCR;
 static uint32_t rng = 0x1234567u;
 static uint32_t rnd(void) { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }
 static float frand(float a, float b) { return a + (b - a) * (float)(rnd() & 0xFFFF) / 65535.0f; }
@@ -580,6 +581,14 @@ static void begin_brief(int n) { load_level(n); state = ST_BRIEF; state_t = 0; u
 /* ------------------------------------------------------------------ */
 /* public API                                                          */
 /* ------------------------------------------------------------------ */
+void game_render_loading(uint32_t *fb) {
+    SCR.px = fb; SCR.w = SCREEN_W; SCR.h = SCREEN_H;
+    tg_set(&SCR, 0, 0);
+    vgrad(0, 0, SCREEN_W, SCREEN_H, 0xFF0B0E16, 0xFF1A1E2C);
+    text_grad(SCREEN_W / 2 - text_w("BREACHLINE", 4) / 2, 100, "BREACHLINE", 0xFFFFC070, 0xFFE2501A, 4);
+    text_c(SCREEN_W / 2, 150, "LOADING...", 0xFFC8CDD6, 1);
+}
+
 void game_init(void) {
     save_load();
     state = ST_TITLE; state_t = 0; menu_sel = 0;
@@ -702,7 +711,6 @@ void game_update(unsigned buttons) {
 /* ------------------------------------------------------------------ */
 /* rendering                                                           */
 /* ------------------------------------------------------------------ */
-static Target SCR;
 static uint8_t vignette[SCREEN_H][SCREEN_W];
 static int vignette_ready;
 
@@ -1028,7 +1036,7 @@ static void draw_title(void) {
     fill(330, 176, 60, 30, 0xFF121418); fill(334, 180, 52, 2, 0xFF1E2228);
     fill(40, 150, 3, 56, 0xFF121418); fill(30, 162, 22, 2, 0xFF121418);
     disc(41.5f, 148, 1.6f, 0xFFFF3030); glow(41.5f, 148, 10, 0xFFFF2020, (int)(100 + 80 * sinf(gtime * 3)));
-    glow(130, 160, 80, 0xFF2FD3C6, 20);
+    glow(130, 160, 60, 0xFF2FD3C6, 22);
     draw_sprite(0, SF_LOW0 + (((int)(gtime * 1.3f + 1)) & 1), 66, 206, 1, 150, 0, 3, NULL, NULL);
     draw_sprite(0, SF_IDLE0 + (((int)(gtime * 1.3f)) & 1), 150, 206, 1, 245, 0, 3, NULL, NULL);
     /* rain */
@@ -1038,7 +1046,7 @@ static void draw_title(void) {
         line_a(x, y, x - 3, y + 9, 0xFF8AA0C8, 70);
     }
     /* logo */
-    glow(SCREEN_W / 2, 50, 170, 0xFFFF7A1A, 40);
+    glow(SCREEN_W / 2, 50, 110, 0xFFFF7A1A, 46);
     text_grad(SCREEN_W / 2 - text_w("BREACHLINE", 5) / 2, 28, "BREACHLINE", 0xFFFFC070, 0xFFE2501A, 5);
     {
         const char *sub = "C L O S E   Q U A R T E R S   R E S C U E";

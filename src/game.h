@@ -24,6 +24,7 @@ enum {
     BTN_SELECT = 1 << 9
 };
 
+void game_render_loading(uint32_t *fb);       /* simple screen shown before game_init */
 void game_init(void);
 void game_update(unsigned buttons);              /* once per frame at 60 Hz */
 void game_render(uint32_t *fb);                  /* SCREEN_W * SCREEN_H pixels */
