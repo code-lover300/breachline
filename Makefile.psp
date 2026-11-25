@@ -1,0 +1,23 @@
+# Build the PSP EBOOT.PBP with the pspdev toolchain:
+#   make -f Makefile.psp
+# or, with Docker and no toolchain installed:
+#   docker run --rm -v "$PWD":/src -w /src pspdev/pspdev:latest make -f Makefile.psp
+
+TARGET = breachline
+OBJS   = src/game.o src/art.o src/gfx.o src/audio.o src/platform_psp.o
+
+INCDIR   = src
+CFLAGS   = -O3 -G0 -Wall -std=gnu99 -ffast-math
+CXXFLAGS = $(CFLAGS)
+ASFLAGS  = $(CFLAGS)
+
+LIBS = -lpspaudiolib -lpspaudio -lpsppower -lpspctrl -lpspdisplay -lpspge -lm
+
+EXTRA_TARGETS   = EBOOT.PBP
+PSP_EBOOT_TITLE = BREACHLINE
+PSP_FW_VERSION  = 500
+PSP_EBOOT_ICON  = assets/ICON0.PNG
+PSP_EBOOT_PIC1  = assets/PIC1.PNG
+
+PSPSDK = $(shell psp-config --pspsdk-path)
+include $(PSPSDK)/lib/build.mak
