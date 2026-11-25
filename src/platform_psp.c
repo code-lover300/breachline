@@ -49,14 +49,15 @@ static void present(void) {
     /* game is 0xAARRGGBB, PSP 8888 is 0xAABBGGRR: swap red and blue */
     uint32_t *dst = vbuf[back];
     const uint32_t *src = frame;
+#define SWAP_RB(p) (((p) & 0xFF00FF00u) | (((p) >> 16) & 0xFFu) | (((p) & 0xFFu) << 16))
     for (int y = 0; y < SCREEN_H; y++) {
         uint32_t *d = dst + y * VRAM_STRIDE;
-        for (int x = 0; x < SCREEN_W; x++) {
-            uint32_t p = *src++;
-            d[x] = (p & 0xFF00FF00u) | ((p >> 16) & 0xFFu) | ((p & 0xFFu) << 16);
+        for (int x = 0; x < SCREEN_W; x += 4) {
+            uint32_t a = src[0], b = src[1], c = src[2], e = src[3];
+            d[x] = SWAP_RB(a); d[x + 1] = SWAP_RB(b); d[x + 2] = SWAP_RB(c); d[x + 3] = SWAP_RB(e);
+            src += 4;
         }
     }
-    sceKernelDcacheWritebackAll();
     sceDisplayWaitVblankStart();
     sceDisplaySetFrameBuf(dst, VRAM_STRIDE, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
     back ^= 1;
@@ -87,6 +88,8 @@ int main(void) {
     game_init();
 
     int audio_started = 0;
+    uint64_t last = sceKernelGetSystemTimeWide();
+    int64_t acc = 16667;
     while (running && !game_wants_quit()) {
         sceCtrlPeekBufferPositive(&pad, 1);
         unsigned b = 0;
@@ -103,7 +106,14 @@ int main(void) {
         if (pad.Lx < 64)  b |= BTN_LEFT;
         if (pad.Lx > 192) b |= BTN_RIGHT;
 
-        game_update(b);
+        /* fixed 60 Hz game clock: if drawing was slow, run extra updates so the
+           game keeps real-time speed (capped so it can't spiral) */
+        uint64_t now = sceKernelGetSystemTimeWide();
+        acc += (int64_t)(now - last);
+        last = now;
+        int steps = 0;
+        while (acc >= 16667 && steps < 4) { game_update(b); acc -= 16667; steps++; }
+        if (steps == 4) acc = 0;
         game_render(frame);
         present();
 

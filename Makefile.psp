@@ -7,7 +7,7 @@ TARGET = breachline
 OBJS   = src/game.o src/art.o src/gfx.o src/audio.o src/platform_psp.o
 
 INCDIR   = src
-CFLAGS   = -O3 -G0 -Wall -std=gnu99 -ffast-math
+CFLAGS   = -O3 -G0 -Wall -std=gnu99 -ffast-math -fsingle-precision-constant -fomit-frame-pointer
 CXXFLAGS = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 

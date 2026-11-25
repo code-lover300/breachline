@@ -200,7 +200,9 @@ static void fail(const char *why) {
 /* ------------------------------------------------------------------ */
 /* level setup                                                         */
 /* ------------------------------------------------------------------ */
+static char hud_key[96];
 static void load_level(int n) {
+    hud_key[0] = 0;
     const LevelDef *L = &LEVELS[n];
     cur_level = n;
     memset(map, '#', sizeof map);
@@ -718,8 +720,8 @@ static void build_vignette(void) {
     for (int y = 0; y < SCREEN_H; y++)
         for (int x = 0; x < SCREEN_W; x++) {
             float dx = (x - SCREEN_W / 2.0f) / (SCREEN_W / 2.0f), dy = (y - (HUD_H + VIEW_H / 2.0f)) / (VIEW_H / 2.0f);
-            float d = dx * dx * 0.7f + dy * dy;
-            float k = 1.0f - 0.42f * fmaxf(0, d - 0.35f);
+            float d = fmaxf(fabsf(dx) * 1.0f, fabsf(dy) * 0.9f);
+            float k = 1.0f - 0.55f * fmaxf(0, d - 0.82f) / 0.18f;
             if (k < 0.45f) k = 0.45f;
             vignette[y][x] = (uint8_t)(k * 255);
         }
@@ -743,8 +745,17 @@ static void blit_world(void) {
         else if (f == pf) { a = (int)lx0 - camxi; b = (int)lx1 - camxi; }
         uint32_t *row = fb + sy * SCREEN_W;
         int alpha = cache_row_alpha[wy];
+        int cx0 = camxi + MARGIN;
+        if (!alpha && cx0 >= 0 && cx0 + SCREEN_W <= cw) {
+            /* fast path: up to three straight copies (dark | lit | dark) */
+            if (a < 0) a = 0; if (b > SCREEN_W) b = SCREEN_W; if (b < a) b = a;
+            if (a > 0) memcpy(row, dark + cx0, a * 4);
+            if (b > a) memcpy(row + a, lit + cx0 + a, (b - a) * 4);
+            if (b < SCREEN_W) memcpy(row + b, dark + cx0 + b, (SCREEN_W - b) * 4);
+            continue;
+        }
         for (int x = 0; x < SCREEN_W; x++) {
-            int cx = camxi + MARGIN + x;
+            int cx = cx0 + x;
             if (cx < 0 || cx >= cw) continue;
             uint32_t c = (x >= a && x < b) ? lit[cx] : dark[cx];
             if (alpha && !(c >> 24)) continue;
@@ -933,17 +944,28 @@ static void draw_entities(void) {
 #undef SY
 }
 
+static int16_t vig_l[SCREEN_H], vig_r[SCREEN_H];
 static void apply_vignette(void) {
-    if (!vignette_ready) build_vignette();
+    if (!vignette_ready) {
+        build_vignette();
+        for (int y = 0; y < SCREEN_H; y++) {
+            int l = 0, r = SCREEN_W;
+            while (l < SCREEN_W && vignette[y][l] < 250) l++;
+            while (r > l && vignette[y][r - 1] < 250) r--;
+            vig_l[y] = (int16_t)l; vig_r[y] = (int16_t)r;
+        }
+    }
     for (int y = HUD_H; y < SCREEN_H; y++) {
         uint32_t *row = SCR.px + y * SCREEN_W;
         const uint8_t *v = vignette[y];
-        for (int x = 0; x < SCREEN_W; x++) {
-            int k = v[x];
-            if (k >= 250) continue;
-            uint32_t p = row[x];
-            uint32_t rb = (((p & 0xFF00FF) * k) >> 8) & 0xFF00FF, g = (((p & 0x00FF00) * k) >> 8) & 0x00FF00;
-            row[x] = 0xFF000000 | rb | g;
+        for (int pass = 0; pass < 2; pass++) {
+            int x0 = pass ? vig_r[y] : 0, x1 = pass ? SCREEN_W : vig_l[y];
+            for (int x = x0; x < x1; x++) {
+                int k = v[x];
+                uint32_t p = row[x];
+                uint32_t rb = (((p & 0xFF00FF) * k) >> 8) & 0xFF00FF, g = (((p & 0x00FF00) * k) >> 8) & 0x00FF00;
+                row[x] = 0xFF000000 | rb | g;
+            }
         }
     }
 }
@@ -953,7 +975,19 @@ static void icon_target(int x, int y, uint32_t c) {
 }
 static void icon_person(int x, int y, uint32_t c) { disc(x, y - 3, 2, c); capsule(x, y + 0.5f, x, y + 4, 2.2f, c); }
 
+static uint32_t hud_cache[SCREEN_W * HUD_H];
+static void draw_hud_real(void);
 static void draw_hud(void) {
+    char key[96];
+    snprintf(key, sizeof key, "%d|%d|%d|%d|%d|%d|%d|%d|%d", cur_level, P.hp, P.ammo,
+             P.reload > 0 ? (int)(P.reload * 46) + 1 : 0, P.f, (int)play_t, hostages_safe(), nH, enemies_left());
+    if (strcmp(key, hud_key)) {
+        draw_hud_real();
+        memcpy(hud_cache, SCR.px, sizeof hud_cache);
+        strcpy(hud_key, key);
+    } else memcpy(SCR.px, hud_cache, sizeof hud_cache);
+}
+static void draw_hud_real(void) {
     char buf[48];
     tg_set(&SCR, 0, 0);
     vgrad(0, 0, SCREEN_W, HUD_H, 0xFF1A1E26, 0xFF0C0E12);
@@ -1127,9 +1161,14 @@ void game_render(uint32_t *fb) {
         if (wy < 0 || (wy < CACHE_H && cache_row_alpha[wy])) sky_rows = y + 1;
     }
     tg_set(&SCR, 0, 0);
-    fill(0, HUD_H, SCREEN_W, VIEW_H, 0xFF000000);
     if (sky_rows > HUD_H) {
+        tg_clip(0, HUD_H, SCREEN_W, sky_rows);
         art_sky(&SCR, camx, camy, gtime);
+        tg_set(&SCR, 0, 0);
+    }
+    {   /* rows past the bottom of the cache (only if the camera overshoots) */
+        int last = HUD_H + (CACHE_H - camyi);
+        if (last < SCREEN_H) fill(0, last, SCREEN_W, SCREEN_H - last, 0xFF0A0B0E);
     }
     blit_world();
     tg_set(&SCR, 0, 0);

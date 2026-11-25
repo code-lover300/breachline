@@ -53,6 +53,7 @@ extern Target *TG;
 extern int TOX, TOY;
 void tg_set(Target *t, int ox, int oy);
 void tg_clip(int x0, int y0, int x1, int y1);
+int  tg_clip_y1(void);
 
 uint32_t cmul(uint32_t c, int k);            /* k: 256 = 1.0 */
 uint32_t cmix(uint32_t a, uint32_t b, int t);/* t: 0..256 toward b */

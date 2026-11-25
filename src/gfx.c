@@ -14,6 +14,8 @@ void tg_clip(int x0, int y0, int x1, int y1) {
     CX1 = x1 > TG->w ? TG->w : x1; CY1 = y1 > TG->h ? TG->h : y1;
 }
 
+int tg_clip_y1(void) { return CY1; }
+
 uint32_t hash32(uint32_t x) {
     x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;
     return x;
@@ -171,18 +173,30 @@ static void line_gen(float x0, float y0, float x1, float y1, uint32_t c, int a, 
 void line_a(float x0, float y0, float x1, float y1, uint32_t c, int a) { line_gen(x0, y0, x1, y1, c, a, 0); }
 void line_add(float x0, float y0, float x1, float y1, uint32_t c, int a) { line_gen(x0, y0, x1, y1, c, a, 2); }
 
+/* glow: additive (1-d)^2 falloff. d^2 indexes a table, so no sqrt per pixel */
+static uint16_t GLOW_LUT[1025];
+static int glow_ready;
 void glow(float cx, float cy, float r, uint32_t c, int a) {
+    if (!glow_ready) {
+        for (int i = 0; i <= 1024; i++) { float d = sqrtf(i / 1024.0f); GLOW_LUT[i] = (uint16_t)((1 - d) * (1 - d) * 256); }
+        glow_ready = 1;
+    }
     BBOX(cx, cy, r)
-    float ir = 1.0f / r;
+    float k = 1024.0f / (r * r);
+    int cr = (c >> 16) & 255, cg = (c >> 8) & 255, cb = c & 255;
     for (int j = by0; j < by1; j++) {
-        float dy = j - TOY + 0.5f - cy;
+        float dy = j - TOY + 0.5f - cy, dy2 = dy * dy;
+        uint32_t *row = TG->px + j * TG->w;
         for (int i = bx0; i < bx1; i++) {
             float dx = i - TOX + 0.5f - cx;
-            float d = sqrtf(dx * dx + dy * dy) * ir;
-            if (d >= 1) continue;
-            float f = (1 - d) * (1 - d);
-            uint32_t *p = TG->px + j * TG->w + i;
-            *p = cadd(*p, c, (int)(a * f));
+            int idx = (int)((dx * dx + dy2) * k);
+            if (idx >= 1024) continue;
+            int w = (a * GLOW_LUT[idx]) >> 8;
+            if (w <= 0) continue;
+            uint32_t d = row[i];
+            int r_ = ((d >> 16) & 255) + ((cr * w) >> 8), g_ = ((d >> 8) & 255) + ((cg * w) >> 8), b_ = (d & 255) + ((cb * w) >> 8);
+            if (r_ > 255) r_ = 255; if (g_ > 255) g_ = 255; if (b_ > 255) b_ = 255;
+            row[i] = 0xFF000000u | (uint32_t)r_ << 16 | (uint32_t)g_ << 8 | (uint32_t)b_;
         }
     }
 }

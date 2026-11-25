@@ -927,9 +927,11 @@ void art_add_bullet_hole(int f, float wx, int wy) {
 /* ------------------------------------------------------------------ */
 void art_sky(Target *t, float camx, float camy, float time) {
     int y0 = camy == 40 ? 0 : HUD_H;   /* menus pass camy 40 and fill the whole screen */
+    int y1 = SCREEN_H;
+    if (TG == t && tg_clip_y1() < SCREEN_H && camy != 40) y1 = tg_clip_y1();   /* caller asked for fewer rows */
     tg_set(t, 0, 0);
-    tg_clip(0, y0, SCREEN_W, SCREEN_H);
-    for (int sy = y0; sy < SCREEN_H; sy++) {
+    tg_clip(0, y0, SCREEN_W, y1);
+    for (int sy = y0; sy < y1; sy++) {
         float wy = sy - HUD_H + camy;
         float u = (wy + 260) / 560; if (u < 0) u = 0; if (u > 1) u = 1;
         uint32_t c = u < 0.6f ? cmix(0xFF04060E, 0xFF161A34, (int)(u / 0.6f * 256)) : cmix(0xFF161A34, 0xFF3A2638, (int)((u - 0.6f) / 0.4f * 256));
@@ -945,7 +947,7 @@ void art_sky(Target *t, float camx, float camy, float time) {
         px_set(x, y, cmix(0xFF0A0C18, (h & 64) ? 0xFFFFE8C8 : 0xFFC8D8FF, tw));
     }
     float mx = 370 - camx * 0.03f, my = HUD_H + 34 - camy * 0.12f;
-    glow(mx, my, 60, 0xFF7080B0, 40);
+    glow(mx, my, 36, 0xFF7080B0, 50);
     disc(mx, my, 11, 0xFFE8E4D2);
     disc(mx - 3, my - 2, 2.5f, 0xFFD0CCBA); disc(mx + 4, my + 3, 1.8f, 0xFFD0CCBA);
     /* two skyline layers */
