@@ -1,0 +1,22 @@
+name: Build PSP EBOOT
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  psp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with the pspdev toolchain
+        run: |
+          DIR=.
+          [ -f Makefile.psp ] || DIR=breachline
+          docker run --rm -v "$PWD/$DIR":/src -w /src pspdev/pspdev:latest make -f Makefile.psp
+          mkdir -p out/PSP/GAME/BREACHLINE
+          cp "$DIR/EBOOT.PBP" out/PSP/GAME/BREACHLINE/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: breachline-psp
+          path: out/
